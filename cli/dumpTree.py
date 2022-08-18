@@ -208,7 +208,7 @@ def dump(input_file, output_file):
         for primaryVertex in event.Primaries:
             #printPrimaryVertex("PP", primaryVertex)
             vertex["eventID"] = event.EventId
-            vertex["eventID"] = primaryVertex.GetInteractionNumber()
+            vertex["interactionID"] = primaryVertex.GetInteractionNumber()
             vertex["x_vert"] = primaryVertex.GetPosition().X()
             vertex["y_vert"] = primaryVertex.GetPosition().Y()
             vertex["z_vert"] = primaryVertex.GetPosition().Z()
