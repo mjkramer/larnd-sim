@@ -223,7 +223,6 @@ def dump(input_file, output_file):
             trajectories[iTraj]["trackID"] = trajectory.GetTrackId()
             trajectories[iTraj]["parentID"] = trajectory.GetParentId()
             # TODO How do we get primaryVertex in this scope?
-            trajectories[iTraj]["interactionID"] = 0
             trajectories[iTraj]["pxyz_start"] = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
             trajectories[iTraj]["pxyz_end"] = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
             trajectories[iTraj]["xyz_start"] = (start_pt.GetPosition().X(), start_pt.GetPosition().Y(), start_pt.GetPosition().Z())
@@ -235,6 +234,11 @@ def dump(input_file, output_file):
             trajectories[iTraj]["end_process"] = end_pt.GetProcess()
             trajectories[iTraj]["end_subprocess"] = end_pt.GetSubprocess()
             trajectories[iTraj]["pdgId"] = trajectory.GetPDGCode()
+            trajectories[iTraj]["interactionID"] = 0
+            for vert in event.Primaries:
+                for particle in vert.Particles:
+                    if particle.GetTrackId() == trajectory.GetTrackId():
+                        trajectories[iTraj]["interactionID"] = particle.GetInteractionNumber()
 
         trajectories_list.append(trajectories)
 
