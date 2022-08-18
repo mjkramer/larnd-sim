@@ -208,6 +208,7 @@ def dump(input_file, output_file):
         for primaryVertex in event.Primaries:
             #printPrimaryVertex("PP", primaryVertex)
             vertex["eventID"] = event.EventId
+            vertex["eventID"] = primaryVertex.GetInteractionNumber()
             vertex["x_vert"] = primaryVertex.GetPosition().X()
             vertex["y_vert"] = primaryVertex.GetPosition().Y()
             vertex["z_vert"] = primaryVertex.GetPosition().Z()
@@ -221,6 +222,8 @@ def dump(input_file, output_file):
             trajectories[iTraj]["eventID"] = event.EventId
             trajectories[iTraj]["trackID"] = trajectory.GetTrackId()
             trajectories[iTraj]["parentID"] = trajectory.GetParentId()
+            # TODO How do we get primaryVertex in this scope?
+            trajectories[iTraj]["interactionID"] = 0
             trajectories[iTraj]["pxyz_start"] = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
             trajectories[iTraj]["pxyz_end"] = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
             trajectories[iTraj]["xyz_start"] = (start_pt.GetPosition().X(), start_pt.GetPosition().Y(), start_pt.GetPosition().Z())
