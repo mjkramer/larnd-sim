@@ -238,7 +238,7 @@ def dump(input_file, output_file):
             for vert in event.Primaries:
                 for particle in vert.Particles:
                     if particle.GetTrackId() == trajectory.GetTrackId():
-                        trajectories[iTraj]["interactionID"] = particle.GetInteractionNumber()
+                        trajectories[iTraj]["interactionID"] = vert.GetInteractionNumber()
 
         trajectories_list.append(trajectories)
 
