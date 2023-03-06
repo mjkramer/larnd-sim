@@ -27,11 +27,11 @@ from larndsim.util import CudaDict, batching
 
 SEED = int(time())
 #BATCH_SIZE = 4000 # track segments
-BATCH_SIZE = 4000 # track segments
-EVENT_BATCH_SIZE = 2 # tpcs
+BATCH_SIZE = 14000 # track segments
+EVENT_BATCH_SIZE = 8 # tpcs
 #WRITE_BATCH_SIZE = 1000 # batches
 WRITE_BATCH_SIZE = 1000 # batches
-EVENT_SEPARATOR = 'spillID' # can be 'eventID' or 'spillID'
+EVENT_SEPARATOR = 'eventID' # can be 'eventID' or 'spillID'
 
 LOGO = """
   _                      _            _
@@ -382,11 +382,15 @@ def run_simulation(input_filename,
         evt_tracks = track_subset
         first_trk_id = np.argmax(batch_mask) # first track in batch
 
+        if evt_tracks.shape[0] > BATCH_SIZE:
+            warnings.warn(f"HACK ALERT HACK ALERT HACK ALERT: Skipping input event {int(track_subset[0]['eventID'])} because it would require sub-batching.")
+            continue
+
         for itrk in tqdm(range(0, evt_tracks.shape[0], BATCH_SIZE),
                          delay=1, desc='  Simulating event %i batches...' % ievd, leave=False, ncols=80):
             if itrk > 0:
-                warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider reducing EVENT_BATCH_SIZE ({EVENT_BATCH_SIZE})")
-                
+                warnings.warn(f"Entered sub-batch loop, results may not be accurate! Consider reducing EVENT_BATCH_SIZE ({EVENT_BATCH_SIZE}) or increasing BATCH_SIZE ({BATCH_SIZE})")
+
             selected_tracks = evt_tracks[itrk:itrk+BATCH_SIZE]
             RangePush("event_id_map")
             event_ids = selected_tracks['eventID']
