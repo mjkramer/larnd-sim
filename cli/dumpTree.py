@@ -9,6 +9,7 @@ import numpy as np
 import fire
 import h5py
 from tqdm import tqdm
+import glob
 
 from ROOT import TG4Event, TFile
 
@@ -157,132 +158,151 @@ def updateHDF5File(output_file, trajectories, segments, vertices):
                 f['vertices'][nvert:] = vertices
 
 # Read a file and dump it.
-def dump(input_file, output_file):
+def dump(input_files, output_file):
 
-    # The input file is generated in a previous test (100TestTree.sh).
-    inputFile = TFile(input_file)
+    """
+    Script to convert edep-sim root output to an h5 file formatted in a way
+    that larnd-sim expects for consumption.
 
-    # Get the input tree out of the file.
-    inputTree = inputFile.Get("EDepSimEvents")
-    #print("Class:", inputTree.ClassName())
-
-    # Attach a brach to the events.
-    event = TG4Event()
-    inputTree.SetBranchAddress("Event",event)
-
-    # Read all of the events.
-    entries = inputTree.GetEntriesFast()
+    Args:
+        input_file (str): path to one or more input root files. Each file is expected
+            expected to correspond to a single spill.
+        output_file (str): name of the h5 output file to which the information should
+            be written
+    """
 
     # Prep output file
     initHDF5File(output_file)
 
-    segments_list = list()
-    trajectories_list = list()
-    vertices_list = list()
-
     segment_id = 0
-    for jentry in tqdm(range(entries)):
-        #print(jentry)
-        nb = inputTree.GetEntry(jentry)
 
-        # write to file
-        if len(trajectories_list) >= 1000 or nb <= 0:
-            updateHDF5File(
-                output_file,
-                np.concatenate(trajectories_list, axis=0) if trajectories_list else np.empty((0,)),
-                np.concatenate(segments_list, axis=0) if segments_list else np.empty((0,)),
-                np.concatenate(vertices_list, axis=0) if vertices_list else np.empty((0,)))
+    for it, inputFile_name in enumerate(glob.glob(input_files)):
 
-            trajectories_list = list()
-            segments_list = list()
-            vertices_list = list()
+        print("----------------------------------------------------")
+        print(it)
+        print("----------------------------------------------------")
+        # Get the input tree out of the file.
+        inputFile = TFile(inputFile_name)
+        inputTree = inputFile.Get("EDepSimEvents")
+        #print("Class:", inputTree.ClassName())
 
-        if nb <= 0:
-            continue
+        # IF CRASH: Uncomment this section (also see IF CRASH below)
+        # Attach a brach to the events.
+        event = TG4Event()
+        inputTree.SetBranchAddress("Event",event)
 
-        #print("Class: ", event.ClassName())
-        #print("Event number:", event.EventId)
+        # Read all of the events.
+        entries = inputTree.GetEntriesFast()
 
-        # Dump the primary vertices
-        vertex = np.empty(len(event.Primaries), dtype=vertices_dtype)
-        for primaryVertex in event.Primaries:
-            #printPrimaryVertex("PP", primaryVertex)
-            vertex["eventID"] = event.EventId
-            vertex["x_vert"] = primaryVertex.GetPosition().X()
-            vertex["y_vert"] = primaryVertex.GetPosition().Y()
-            vertex["z_vert"] = primaryVertex.GetPosition().Z()
-            vertices_list.append(vertex)
+        segments_list = list()
+        trajectories_list = list()
+        vertices_list = list()
 
-        # Dump the trajectories
-        #print("Number of trajectories ", len(event.Trajectories))
-        trajectories = np.empty(len(event.Trajectories), dtype=trajectories_dtype)
-        for iTraj, trajectory in enumerate(event.Trajectories):
-            start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
-            trajectories[iTraj]["eventID"] = event.EventId
-            trajectories[iTraj]["trackID"] = trajectory.GetTrackId()
-            trajectories[iTraj]["parentID"] = trajectory.GetParentId()
-            trajectories[iTraj]["pxyz_start"] = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
-            trajectories[iTraj]["pxyz_end"] = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
-            trajectories[iTraj]["xyz_start"] = (start_pt.GetPosition().X(), start_pt.GetPosition().Y(), start_pt.GetPosition().Z())
-            trajectories[iTraj]["xyz_end"] = (end_pt.GetPosition().X(), end_pt.GetPosition().Y(), end_pt.GetPosition().Z())
-            trajectories[iTraj]["t_start"] = start_pt.GetPosition().T() * edep2us
-            trajectories[iTraj]["t_end"] = end_pt.GetPosition().T() * edep2us
-            trajectories[iTraj]["start_process"] = start_pt.GetProcess()
-            trajectories[iTraj]["start_subprocess"] = start_pt.GetSubprocess()
-            trajectories[iTraj]["end_process"] = end_pt.GetProcess()
-            trajectories[iTraj]["end_subprocess"] = end_pt.GetSubprocess()
-            trajectories[iTraj]["pdgId"] = trajectory.GetPDGCode()
+        for jentry in tqdm(range(entries)):
+            #print(jentry)
+            nb = inputTree.GetEntry(jentry)
 
-        trajectories_list.append(trajectories)
+            # IF CRASH: Comment this line (also see IF CRASH above)
+            # event = inputTree.Event
 
-        # Dump the segment containers
-        #print("Number of segment containers:", event.SegmentDetectors.size())
+            # write to file
+            if len(trajectories_list) >= 1000 or nb <= 0:
+                updateHDF5File(
+                    output_file,
+                    np.concatenate(trajectories_list, axis=0) if trajectories_list else np.empty((0,)),
+                    np.concatenate(segments_list, axis=0) if segments_list else np.empty((0,)),
+                    np.concatenate(vertices_list, axis=0) if vertices_list else np.empty((0,)))
 
-        for containerName, hitSegments in event.SegmentDetectors:
+                trajectories_list = list()
+                segments_list = list()
+                vertices_list = list()
 
-            segment = np.empty(len(hitSegments), dtype=segments_dtype)
-            for iHit, hitSegment in enumerate(hitSegments):
-                segment[iHit]["eventID"] = event.EventId
-                segment[iHit]["segment_id"] = segment_id
-                segment_id += 1
-                segment[iHit]["trackID"] = trajectories[hitSegment.Contrib[0]]["trackID"]
-                segment[iHit]["x_start"] = hitSegment.GetStart().X() * edep2cm
-                segment[iHit]["y_start"] = hitSegment.GetStart().Y() * edep2cm
-                segment[iHit]["z_start"] = hitSegment.GetStart().Z() * edep2cm
-                segment[iHit]["t0_start"] = hitSegment.GetStart().T() * edep2us 
-                segment[iHit]["t_start"] = 0
-                segment[iHit]["x_end"] = hitSegment.GetStop().X() * edep2cm
-                segment[iHit]["y_end"] = hitSegment.GetStop().Y() * edep2cm
-                segment[iHit]["z_end"] = hitSegment.GetStop().Z() * edep2cm
-                segment[iHit]["t0_end"] = hitSegment.GetStop().T() * edep2us
-                segment[iHit]["t_end"] = 0
-                segment[iHit]["dE"] = hitSegment.GetEnergyDeposit()
-                xd = segment[iHit]["x_end"] - segment[iHit]["x_start"]
-                yd = segment[iHit]["y_end"] - segment[iHit]["y_start"]
-                zd = segment[iHit]["z_end"] - segment[iHit]["z_start"]
-                dx = sqrt(xd**2 + yd**2 + zd**2)
-                segment[iHit]["dx"] = dx
-                segment[iHit]["x"] = (segment[iHit]["x_start"] + segment[iHit]["x_end"]) / 2.
-                segment[iHit]["y"] = (segment[iHit]["y_start"] + segment[iHit]["y_end"]) / 2.
-                segment[iHit]["z"] = (segment[iHit]["z_start"] + segment[iHit]["z_end"]) / 2.
-                segment[iHit]["t0"] = (segment[iHit]["t0_start"] + segment[iHit]["t0_end"]) / 2.
-                segment[iHit]["t"] = 0
-                segment[iHit]["dEdx"] = hitSegment.GetEnergyDeposit() / dx if dx > 0 else 0
-                segment[iHit]["pdgId"] = trajectories[hitSegment.Contrib[0]]["pdgId"]
-                segment[iHit]["n_electrons"] = 0
-                segment[iHit]["long_diff"] = 0
-                segment[iHit]["tran_diff"] = 0
-                segment[iHit]["pixel_plane"] = 0
-                segment[iHit]["n_photons"] = 0
+            if nb <= 0:
+                continue
 
-            segments_list.append(segment)
+            #print("Class: ", event.ClassName())
+            #print("Event number:", event.EventId)
 
-    # save any lingering data not written to file
-    updateHDF5File(
-        output_file,
-        np.concatenate(trajectories_list, axis=0) if trajectories_list else np.empty((0,)),
-        np.concatenate(segments_list, axis=0) if segments_list else np.empty((0,)),
-        np.concatenate(vertices_list, axis=0) if vertices_list else np.empty((0,)))
+            # Dump the primary vertices
+            vertex = np.empty(len(event.Primaries), dtype=vertices_dtype)
+            for primaryVertex in event.Primaries:
+                #printPrimaryVertex("PP", primaryVertex)
+                vertex["eventID"] = event.EventId
+                vertex["x_vert"] = primaryVertex.GetPosition().X()
+                vertex["y_vert"] = primaryVertex.GetPosition().Y()
+                vertex["z_vert"] = primaryVertex.GetPosition().Z()
+                vertices_list.append(vertex)
+
+            # Dump the trajectories
+            #print("Number of trajectories ", len(event.Trajectories))
+            trajectories = np.empty(len(event.Trajectories), dtype=trajectories_dtype)
+            for iTraj, trajectory in enumerate(event.Trajectories):
+                start_pt, end_pt = trajectory.Points[0], trajectory.Points[-1]
+                trajectories[iTraj]["eventID"] = event.EventId
+                trajectories[iTraj]["trackID"] = trajectory.GetTrackId()
+                trajectories[iTraj]["parentID"] = trajectory.GetParentId()
+                trajectories[iTraj]["pxyz_start"] = (start_pt.GetMomentum().X(), start_pt.GetMomentum().Y(), start_pt.GetMomentum().Z())
+                trajectories[iTraj]["pxyz_end"] = (end_pt.GetMomentum().X(), end_pt.GetMomentum().Y(), end_pt.GetMomentum().Z())
+                trajectories[iTraj]["xyz_start"] = (start_pt.GetPosition().X(), start_pt.GetPosition().Y(), start_pt.GetPosition().Z())
+                trajectories[iTraj]["xyz_end"] = (end_pt.GetPosition().X(), end_pt.GetPosition().Y(), end_pt.GetPosition().Z())
+                trajectories[iTraj]["t_start"] = start_pt.GetPosition().T() * edep2us
+                trajectories[iTraj]["t_end"] = end_pt.GetPosition().T() * edep2us
+                trajectories[iTraj]["start_process"] = start_pt.GetProcess()
+                trajectories[iTraj]["start_subprocess"] = start_pt.GetSubprocess()
+                trajectories[iTraj]["end_process"] = end_pt.GetProcess()
+                trajectories[iTraj]["end_subprocess"] = end_pt.GetSubprocess()
+                trajectories[iTraj]["pdgId"] = trajectory.GetPDGCode()
+
+            trajectories_list.append(trajectories)
+
+            # Dump the segment containers
+            #print("Number of segment containers:", event.SegmentDetectors.size())
+
+            for containerName, hitSegments in event.SegmentDetectors:
+
+                segment = np.empty(len(hitSegments), dtype=segments_dtype)
+                for iHit, hitSegment in enumerate(hitSegments):
+                    segment[iHit]["eventID"] = event.EventId
+                    segment[iHit]["segment_id"] = segment_id
+                    segment_id += 1
+                    segment[iHit]["trackID"] = trajectories[hitSegment.Contrib[0]]["trackID"]
+                    segment[iHit]["x_start"] = hitSegment.GetStart().X() * edep2cm
+                    segment[iHit]["y_start"] = hitSegment.GetStart().Y() * edep2cm
+                    segment[iHit]["z_start"] = hitSegment.GetStart().Z() * edep2cm
+                    segment[iHit]["t0_start"] = hitSegment.GetStart().T() * edep2us
+                    segment[iHit]["t_start"] = 0
+                    segment[iHit]["x_end"] = hitSegment.GetStop().X() * edep2cm
+                    segment[iHit]["y_end"] = hitSegment.GetStop().Y() * edep2cm
+                    segment[iHit]["z_end"] = hitSegment.GetStop().Z() * edep2cm
+                    segment[iHit]["t0_end"] = hitSegment.GetStop().T() * edep2us
+                    segment[iHit]["t_end"] = 0
+                    segment[iHit]["dE"] = hitSegment.GetEnergyDeposit()
+                    xd = segment[iHit]["x_end"] - segment[iHit]["x_start"]
+                    yd = segment[iHit]["y_end"] - segment[iHit]["y_start"]
+                    zd = segment[iHit]["z_end"] - segment[iHit]["z_start"]
+                    dx = sqrt(xd**2 + yd**2 + zd**2)
+                    segment[iHit]["dx"] = dx
+                    segment[iHit]["x"] = (segment[iHit]["x_start"] + segment[iHit]["x_end"]) / 2.
+                    segment[iHit]["y"] = (segment[iHit]["y_start"] + segment[iHit]["y_end"]) / 2.
+                    segment[iHit]["z"] = (segment[iHit]["z_start"] + segment[iHit]["z_end"]) / 2.
+                    segment[iHit]["t0"] = (segment[iHit]["t0_start"] + segment[iHit]["t0_end"]) / 2.
+                    segment[iHit]["t"] = 0
+                    segment[iHit]["dEdx"] = hitSegment.GetEnergyDeposit() / dx if dx > 0 else 0
+                    segment[iHit]["pdgId"] = trajectories[hitSegment.Contrib[0]]["pdgId"]
+                    segment[iHit]["n_electrons"] = 0
+                    segment[iHit]["long_diff"] = 0
+                    segment[iHit]["tran_diff"] = 0
+                    segment[iHit]["pixel_plane"] = 0
+                    segment[iHit]["n_photons"] = 0
+
+                segments_list.append(segment)
+
+        # save any lingering data not written to file
+        updateHDF5File(
+            output_file,
+            np.concatenate(trajectories_list, axis=0) if trajectories_list else np.empty((0,)),
+            np.concatenate(segments_list, axis=0) if segments_list else np.empty((0,)),
+            np.concatenate(vertices_list, axis=0) if vertices_list else np.empty((0,)))
 
 if __name__ == "__main__":
     fire.Fire(dump)
